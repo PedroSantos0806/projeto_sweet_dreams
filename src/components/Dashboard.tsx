@@ -31,8 +31,14 @@ export default function Dashboard() {
 
   // Stats
   const activeOrders = orders.filter(o => o.status === 'pending').length;
+  const paidOrders = orders.filter(o => o.status === 'paid').length;
   const totalRevenue = transactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
   const totalOrders = orders.length;
+
+  const orderStatusData = [
+    { name: 'Efetuados', value: paidOrders, color: '#10b981' },
+    { name: 'Pendentes', value: activeOrders, color: '#f59e0b' }
+  ].filter(d => d.value > 0);
 
   // Product popularity
   const productStats = orders.reduce((acc: any, order) => {
@@ -103,32 +109,86 @@ export default function Dashboard() {
 
       {/* Main Visual Panels */}
       <div className="grid grid-cols-12 gap-8">
-        {/* Recent Orders List Style Panel */}
-        <div className="col-span-12 xl:col-span-8 bg-white rounded-[40px] shadow-sm p-8 border border-pink-50">
-           <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-             <span className="w-2 h-6 bg-pink-500 rounded-full"></span>
-             Doces que mais saíram
-           </h3>
-           
-           <div className="h-80 w-full mb-8">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topProductsData} layout="vertical" margin={{ left: 40 }}>
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{fill: '#4b5563', fontWeight: 'bold', fontSize: 13}} />
-                <Tooltip 
-                  cursor={{fill: 'transparent'}}
-                  contentStyle={{ borderRadius: '20px', border: 'none', boxShadow: '0 10px 30px rgba(0,0,0,0.1)' }}
-                />
-                <Bar 
-                  dataKey="value" 
-                  fill="#ec4899" 
-                  radius={[0, 20, 20, 0]} 
-                  barSize={20}
-                  animationBegin={200}
-                />
-              </BarChart>
-            </ResponsiveContainer>
-           </div>
+        <div className="col-span-12 xl:col-span-8 bg-white rounded-[40px] shadow-sm p-8 border border-pink-50 flex flex-col md:flex-row gap-8">
+          <div className="flex-1">
+            <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+              <span className="w-2 h-6 bg-pink-500 rounded-full"></span>
+              Mais Vendidos
+            </h3>
+            
+            <div className="h-80 w-full mb-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart 
+                  data={topProductsData} 
+                  layout="vertical" 
+                  margin={{ left: 60, right: 30 }}
+                >
+                  <XAxis type="number" hide />
+                  <YAxis 
+                    dataKey="name" 
+                    type="category" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{fill: '#4b5563', fontWeight: '800', fontSize: 11}} 
+                    width={100}
+                  />
+                  <Tooltip 
+                    cursor={{fill: 'rgba(236, 72, 153, 0.05)', radius: 10}}
+                    contentStyle={{ borderRadius: '24px', border: 'none', boxShadow: '0 20px 40px rgba(0,0,0,0.1)', padding: '15px' }}
+                    itemStyle={{ fontWeight: '800', color: '#ec4899' }}
+                    formatter={(value: any) => [`${value} unidades`, 'Quantidade']}
+                    labelStyle={{ fontWeight: '900', color: '#1f2937' }}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    radius={[0, 20, 20, 0]} 
+                    barSize={20}
+                  >
+                    {topProductsData.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="md:w-64 flex flex-col justify-center items-center p-6 bg-gray-50 rounded-[32px] border border-gray-100">
+             <h3 className="text-sm font-bold text-gray-500 mb-4 uppercase tracking-widest text-center">Status Geral</h3>
+             <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={orderStatusData}
+                      innerRadius={50}
+                      outerRadius={70}
+                      paddingAngle={5}
+                      dataKey="value"
+                      animationDuration={1000}
+                    >
+                      {orderStatusData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip 
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 20px rgba(0,0,0,0.1)' }}
+                      formatter={(value: any) => [`${value} pedidos`]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+             </div>
+             <div className="mt-4 space-y-2 w-full text-center">
+                {orderStatusData.map((d, i) => (
+                  <div key={i} className="flex justify-between items-center bg-white px-4 py-2 rounded-xl text-[10px] font-black uppercase">
+                     <div className="flex items-center gap-2">
+                        <div className="w-2 h-2 rounded-full" style={{backgroundColor: d.color}}></div>
+                        <span>{d.name}</span>
+                     </div>
+                     <span className="text-pink-500">{d.value}</span>
+                  </div>
+                ))}
+             </div>
+          </div>
         </div>
 
         {/* Top Products Analysis (Vibrant Card Style) */}

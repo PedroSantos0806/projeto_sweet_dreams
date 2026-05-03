@@ -65,6 +65,16 @@ export default function Orders() {
     }));
   };
 
+  const handleManualQuantityChange = (productId: string, value: string) => {
+    const newQty = parseInt(value) || 0;
+    setSelectedItems(selectedItems.map(item => {
+      if (item.productId === productId) {
+        return { ...item, quantity: newQty };
+      }
+      return item;
+    }));
+  };
+
   const removeItem = (productId: string) => {
     setSelectedItems(selectedItems.filter(item => item.productId !== productId));
   };
@@ -233,7 +243,13 @@ export default function Orders() {
                           >
                             <Minus className="w-3 h-3" />
                           </button>
-                          <span className="font-black text-pink-500 text-xs">{item.quantity}</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity || ''}
+                            onChange={(e) => handleManualQuantityChange(item.productId, e.target.value)}
+                            className="w-12 bg-pink-50 text-pink-600 text-xs font-black text-center p-1 rounded-lg border-none focus:ring-1 focus:ring-pink-300 outline-none"
+                          />
                           <button 
                             type="button" 
                             onClick={() => updateQuantity(item.productId, 1)}

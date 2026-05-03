@@ -1,0 +1,82 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- ENTITY VALIDATIONS ---
+
+    function isValidUser(data) {
+      return data.username is string && data.username.size() >= 1 && data.username.size() <= 100 &&
+             data.password is string && data.password.size() >= 1 && data.password.size() <= 200;
+    }
+
+    function isValidProduct(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+             data.price is number && data.price >= 0 &&
+             (data.get('category', '') is string);
+    }
+
+    function isValidOrder(data) {
+      return data.customerName is string && data.customerName.size() >= 0 && data.customerName.size() <= 200 &&
+             data.items is list && data.items.size() <= 50 &&
+             data.total is number && data.total >= 0 &&
+             data.status in ['pending', 'paid'];
+    }
+
+    function isValidTransaction(data) {
+      return data.type in ['income', 'expense'] &&
+             data.amount is number && data.amount >= 0 &&
+             data.description is string && data.description.size() <= 500;
+    }
+
+    // --- MATCH BLOCKS ---
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidUser(incoming());
+      allow update: if isSignedIn() && isValidUser(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidProduct(incoming());
+      allow update: if isSignedIn() && isValidProduct(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /orders/{orderId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidOrder(incoming());
+      allow update: if isSignedIn() && isValidOrder(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidTransaction(incoming());
+      allow update: if isSignedIn() && isValidTransaction(incoming());
+      allow delete: if isSignedIn();
+    }
+  }
+}

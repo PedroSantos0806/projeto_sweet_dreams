@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and authentication data",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" },
+        "displayName": { "type": "string" },
+        "hasChangedPassword": { "type": "boolean" }
+      },
+      "required": ["username", "password"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Candy product details",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" }
+      },
+      "required": ["name", "price"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer order details",
+      "type": "object",
+      "properties": {
+        "customerName": { "type": "string" },
+        "items": { "type": "array" },
+        "total": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "paid"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["items", "total", "status"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial record (income or expense)",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["income", "expense"] },
+        "amount": { "type": "number" },
+        "description": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "orderId": { "type": "string" }
+      },
+      "required": ["type", "amount", "date"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Collection of system users"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Catalog of candies"
+    },
+    "orders": {
+      "schema": "Order",
+      "description": "Customer order history"
+    },
+    "transactions": {
+      "schema": "Transaction",
+      "description": "Financial ledger"
+    }
+  }
+}

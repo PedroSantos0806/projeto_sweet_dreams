@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { collection, onSnapshot, addDoc, query, orderBy, serverTimestamp, where, limit, getDocs, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, query, orderBy, serverTimestamp, where, limit, getDocs, deleteDoc, updateDoc, doc } from 'firebase/firestore';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Transaction } from '../types';
-import { Plus, TrendingUp, TrendingDown, Wallet, Calendar, ArrowUpRight, ArrowDownRight, X, Trash2 } from 'lucide-react';
+import { Plus, TrendingUp, TrendingDown, Wallet, Calendar, ArrowUpRight, ArrowDownRight, X, Trash2, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, subDays, isSameDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -16,6 +16,7 @@ export default function Finance() {
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(100));
@@ -25,23 +26,58 @@ export default function Finance() {
     return unsubscribe;
   }, []);
 
-  const handleAddTransaction = async (e: React.FormEvent) => {
+  const handleSaveTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || !description) return;
 
+    const docPath = editingTransaction ? `transactions/${editingTransaction.id}` : 'transactions';
     try {
-      await addDoc(collection(db, 'transactions'), {
-        type,
-        amount: parseFloat(amount),
-        description,
-        date: serverTimestamp()
-      });
-      setAmount('');
-      setDescription('');
-      setShowAdd(false);
+      if (editingTransaction) {
+        await updateDoc(doc(db, 'transactions', editingTransaction.id), {
+          type,
+          amount: parseFloat(amount),
+          description,
+        });
+      } else {
+        await addDoc(collection(db, 'transactions'), {
+          type,
+          amount: parseFloat(amount),
+          description,
+          date: serverTimestamp()
+        });
+      }
+      resetForm();
     } catch (err) {
-      handleFirestoreError(err, OperationType.CREATE, 'transactions');
+      handleFirestoreError(err, editingTransaction ? OperationType.UPDATE : OperationType.CREATE, docPath);
     }
+  };
+
+  const handleDeleteTransaction = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Deseja excluir esta transação?')) {
+      const docPath = `transactions/${id}`;
+      try {
+        await deleteDoc(doc(db, 'transactions', id));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, docPath);
+      }
+    }
+  };
+
+  const startEdit = (t: Transaction) => {
+    setEditingTransaction(t);
+    setAmount(t.amount.toString());
+    setDescription(t.description);
+    setType(t.type);
+    setShowAdd(true);
+  };
+
+  const resetForm = () => {
+    setAmount('');
+    setDescription('');
+    setType('expense');
+    setEditingTransaction(null);
+    setShowAdd(false);
   };
 
   const totalIncome = transactions
@@ -102,7 +138,10 @@ export default function Finance() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setShowAdd(!showAdd)}
+            onClick={() => {
+              if (showAdd) resetForm();
+              else setShowAdd(true);
+            }}
             className="flex items-center space-x-2 bg-pink-500 text-white px-6 py-3 rounded-2xl shadow-lg shadow-pink-100 hover:bg-pink-600 transition-all font-bold"
           >
             {showAdd ? <X className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
@@ -119,7 +158,7 @@ export default function Finance() {
             exit={{ scale: 0.95, opacity: 0 }}
             className="overflow-hidden"
           >
-            <form onSubmit={handleAddTransaction} className="bg-white p-8 rounded-[40px] shadow-sm border border-pink-100 flex flex-col md:flex-row items-end gap-4">
+            <form onSubmit={handleSaveTransaction} className="bg-white p-8 rounded-[40px] shadow-sm border border-pink-100 flex flex-col md:flex-row items-end gap-4">
               <div className="flex-1 space-y-2">
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest">Tipo</label>
                 <div className="flex p-1 bg-gray-50 rounded-xl">
@@ -166,7 +205,7 @@ export default function Finance() {
                 type="submit"
                 className={`w-full md:w-auto font-black py-4 px-8 rounded-2xl shadow-lg transition-all uppercase tracking-widest text-xs text-white ${type === 'income' ? 'bg-green-500 shadow-green-100 hover:bg-green-600' : 'bg-red-500 shadow-red-100 hover:bg-red-600'}`}
               >
-                Salvar
+                {editingTransaction ? 'Atualizar' : 'Salvar'}
               </button>
             </form>
           </motion.div>
@@ -269,9 +308,9 @@ export default function Finance() {
 
         <div className="bg-white p-8 rounded-[40px] border border-pink-50 shadow-sm flex flex-col">
            <h3 className="text-lg font-bold text-gray-800 mb-6 italic underline decoration-pink-300 decoration-3">Últimas Transações</h3>
-           <div className="space-y-4 flex-1 overflow-y-auto max-h-72 pr-2 custom-scrollbar">
+            <div className="space-y-4 flex-1 overflow-y-auto max-h-72 pr-2 custom-scrollbar">
               {transactions.map((t) => (
-                <div key={t.id} className="flex items-center justify-between p-4 rounded-[24px] hover:bg-pink-50 transition-colors border border-transparent hover:border-pink-100">
+                <div key={t.id} className="group relative flex items-center justify-between p-4 rounded-[24px] hover:bg-pink-50 transition-colors border border-transparent hover:border-pink-100">
                   <div className="flex items-center space-x-3">
                     <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold ${t.type === 'income' ? 'bg-green-50 text-green-500' : 'bg-red-50 text-red-500'}`}>
                       {t.type === 'income' ? '💰' : '💸'}
@@ -281,9 +320,27 @@ export default function Finance() {
                       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{t.date && format(t.date.toDate(), "dd 'de' MMM", { locale: ptBR })}</p>
                     </div>
                   </div>
-                  <span className={`font-black text-sm ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                    {t.type === 'income' ? '+' : '-'} R$ {t.amount.toFixed(2)}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`font-black text-sm ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                      {t.type === 'income' ? '+' : '-'} R$ {t.amount.toFixed(2)}
+                    </span>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => startEdit(t)}
+                        className="p-1.5 text-pink-300 hover:text-pink-600 transition-colors"
+                        title="Editar"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={(e) => handleDeleteTransaction(t.id, e)}
+                        className="p-1.5 text-red-300 hover:text-red-600 transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
               {transactions.length === 0 && (

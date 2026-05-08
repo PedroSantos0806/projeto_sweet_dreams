@@ -4,7 +4,7 @@ import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { Transaction } from '../types';
 import { Plus, TrendingUp, TrendingDown, Wallet, Calendar, ArrowUpRight, ArrowDownRight, X, Trash2, Edit2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, subDays, isSameDay } from 'date-fns';
+import { format, subDays, isSameDay, subWeeks, startOfWeek, subMonths, startOfMonth, subYears, startOfYear, isSameMonth, isSameYear, isSameWeek } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -17,14 +17,46 @@ export default function Finance() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState<'income' | 'expense'>('expense');
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [periodFilter, setPeriodFilter] = useState<'daily' | 'weekly' | 'monthly' | 'yearly'>('daily');
 
   useEffect(() => {
-    const q = query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(100));
+    const q = query(collection(db, 'transactions'), orderBy('date', 'desc'), limit(500));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setTransactions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Transaction[]);
     });
     return unsubscribe;
   }, []);
+
+  const syncHistoricalOrders = async () => {
+    try {
+      const qOrders = query(collection(db, 'orders'), where('status', '==', 'paid'));
+      const ordersSnap = await getDocs(qOrders);
+      
+      const qTrans = query(collection(db, 'transactions'));
+      const transSnap = await getDocs(qTrans);
+      const existingOrderIds = new Set(transSnap.docs.map(d => d.data().orderId).filter(id => !!id));
+
+      let syncCount = 0;
+      for (const orderDoc of ordersSnap.docs) {
+        if (!existingOrderIds.has(orderDoc.id)) {
+          const order = { id: orderDoc.id, ...orderDoc.data() } as any;
+          await addDoc(collection(db, 'transactions'), {
+            type: 'income',
+            amount: order.total,
+            description: `Venda para ${order.customerName} (Pedido #${order.id.slice(0, 5)})`,
+            date: order.createdAt || serverTimestamp(),
+            orderId: order.id
+          });
+          syncCount++;
+        }
+      }
+      if (syncCount > 0) alert(`${syncCount} pedidos sincronizados com o financeiro!`);
+      else alert('Todos os pedidos já estão sincronizados.');
+    } catch (err) {
+      console.error("Erro na sincronização:", err);
+      alert("Erro ao sincronizar. Verifique o console.");
+    }
+  };
 
   const handleSaveTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -90,17 +122,62 @@ export default function Finance() {
 
   const balance = totalIncome - totalExpense;
 
-  // Chart Data: Last 7 days including today
-  const last7Days = Array.from({ length: 7 }, (_, i) => subDays(new Date(), 6 - i));
-  
-  const chartData = last7Days.map(day => {
-    const dayTransactions = transactions.filter(t => t.date && isSameDay(t.date.toDate(), day));
-    return {
-      name: format(day, 'dd/MM'),
-      receitas: dayTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0),
-      despesas: dayTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
-    };
-  });
+  // Aggregate Chart Data based on periodFilter
+  const getChartData = () => {
+    const now = new Date();
+    
+    if (periodFilter === 'daily') {
+      const last7Days = Array.from({ length: 7 }, (_, i) => subDays(now, 6 - i));
+      return last7Days.map(day => {
+        const dayTransactions = transactions.filter(t => t.date && isSameDay(t.date.toDate(), day));
+        return {
+          name: format(day, 'dd/MM'),
+          receitas: dayTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0),
+          despesas: dayTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
+        };
+      });
+    }
+
+    if (periodFilter === 'weekly') {
+      const last8Weeks = Array.from({ length: 8 }, (_, i) => startOfWeek(subWeeks(now, 7 - i)));
+      return last8Weeks.map(week => {
+        const weekTransactions = transactions.filter(t => t.date && isSameWeek(t.date.toDate(), week));
+        return {
+          name: `Sem ${format(week, 'dd/MM')}`,
+          receitas: weekTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0),
+          despesas: weekTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
+        };
+      });
+    }
+
+    if (periodFilter === 'monthly') {
+      const last6Months = Array.from({ length: 6 }, (_, i) => startOfMonth(subMonths(now, 5 - i)));
+      return last6Months.map(month => {
+        const monthTransactions = transactions.filter(t => t.date && isSameMonth(t.date.toDate(), month));
+        return {
+          name: format(month, 'MMM', { locale: ptBR }),
+          receitas: monthTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0),
+          despesas: monthTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
+        };
+      });
+    }
+
+    if (periodFilter === 'yearly') {
+      const last5Years = Array.from({ length: 5 }, (_, i) => startOfYear(subYears(now, 4 - i)));
+      return last5Years.map(year => {
+        const yearTransactions = transactions.filter(t => t.date && isSameYear(t.date.toDate(), year));
+        return {
+          name: format(year, 'yyyy'),
+          receitas: yearTransactions.filter(t => t.type === 'income').reduce((acc, t) => acc + t.amount, 0),
+          despesas: yearTransactions.filter(t => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0),
+        };
+      });
+    }
+
+    return [];
+  };
+
+  const chartData = getChartData();
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -118,7 +195,7 @@ export default function Finance() {
             ))}
             <div className="pt-2 border-t border-gray-50 mt-2 flex justify-between items-center bg-gray-50 -mx-4 px-4 py-2 rounded-b-[24px]">
               <span className="text-[10px] font-black text-gray-400">SALDO:</span>
-              <span className={`text-[11px] font-black ${(payload[0].value - payload[1].value) >= 0 ? 'text-brand-accent' : 'text-red-600'}`}>
+              <span className={`text-[11px] font-black ${(payload[0].value - payload[1].value) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 R$ {(payload[0].value - payload[1].value).toFixed(2)}
               </span>
             </div>
@@ -137,6 +214,14 @@ export default function Finance() {
           <p className="text-gray-500">Controle de lucros e despesas</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={syncHistoricalOrders}
+            className="flex items-center space-x-2 bg-green-50 text-green-600 px-6 py-3 rounded-2xl hover:bg-green-100 transition-all font-bold group"
+            title="Sincronizar Pedidos Pagos"
+          >
+            <TrendingUp className="w-5 h-5 group-hover:scale-110 transition-transform" />
+            <span className="hidden sm:inline">Sincronizar</span>
+          </button>
           <button
             onClick={() => {
               if (showAdd) resetForm();
@@ -243,11 +328,24 @@ export default function Finance() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-white p-8 rounded-[40px] border border-pink-50 shadow-sm">
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <h3 className="text-xl font-bold flex items-center gap-2">
               <span className="w-2 h-6 bg-pink-500 rounded-full"></span>
-              Movimentação Diária
+              Movimentações
             </h3>
+            
+            <div className="flex items-center gap-1 p-1 bg-gray-50 rounded-xl overflow-x-auto">
+              {(['daily', 'weekly', 'monthly', 'yearly'] as const).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setPeriodFilter(p)}
+                  className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all whitespace-nowrap ${periodFilter === p ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-pink-500'}`}
+                >
+                  {p === 'daily' ? 'Diário' : p === 'weekly' ? 'Semanal' : p === 'monthly' ? 'Mensal' : 'Anual'}
+                </button>
+              ))}
+            </div>
+
             <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest text-gray-400">
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-pink-500"></div>Receitas</div>
               <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-400"></div>Despesas</div>

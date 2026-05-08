@@ -152,18 +152,24 @@ export default function Orders() {
   const confirmPayment = async (order: Order) => {
     const docPath = `orders/${order.id}`;
     try {
-      // 1. Update Order Status
+      // 1. Check if transaction already exists
+      const q = query(collection(db, 'transactions'), where('orderId', '==', order.id));
+      const transSnap = await getDocs(q);
+      
+      if (transSnap.empty) {
+        // 2. record transaction if not exists
+        await addDoc(collection(db, 'transactions'), {
+          type: 'income',
+          amount: order.total,
+          description: `Venda para ${order.customerName} (Pedido #${order.id.slice(0, 5)})`,
+          date: serverTimestamp(),
+          orderId: order.id
+        });
+      }
+
+      // 3. Update Order Status
       await updateDoc(doc(db, 'orders', order.id), {
         status: 'paid'
-      });
-
-      // 2. Automatically record transaction
-      await addDoc(collection(db, 'transactions'), {
-        type: 'income',
-        amount: order.total,
-        description: `Venda para ${order.customerName} (Pedido #${order.id.slice(0, 5)})`,
-        date: serverTimestamp(),
-        orderId: order.id
       });
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, docPath);
